@@ -2,6 +2,8 @@ const canvas = document.getElementById("renderCanvas"); // Get the canvas elemen
 const engine = new BABYLON.Engine(canvas, true);
 var startTime = new Date().getTime();
 var resetGeometry = null;
+var pressedDownOnFace = false;
+var isKeyPressed = false;
 var selectedFace = -1;
 var extrusionDetails = {
     allow: false,
@@ -29,7 +31,7 @@ const createScene = function () {
     box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
     box.material.backFaceCulling = false;
     resetGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
-    // box.rotation.z = Math.PI/6;
+    extrusionDetails.originalGeometry = resetGeometry;
 
     box.isPickable = true;
     box.enableEdgesRendering();
@@ -39,46 +41,33 @@ const createScene = function () {
     const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2.5, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0));
     camera.attachControl(canvas, true);
     
-    const ambientLight1 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 1), scene);
-    ambientLight1.diffuse = new BABYLON.Color3(1, 1, 1);
-    ambientLight1.intensity = 0.5;
-
-    const ambientLight2 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(-1,-1,-1), scene);
-    ambientLight2.diffuse = new BABYLON.Color3(1, 1, 1);
-    ambientLight2.intensity = 0.5;
-
-    const light = new BABYLON.PointLight("light", new BABYLON.Vector3(6,3,0), scene);
-    light.diffuse = new BABYLON.Color3(1, 1, 1);
-    light.intensity = 1;
-
+    setupLights(scene);
     drawAxes(100, scene);
 
     // Register the onKeyboardObservable to listen for keyboard events
     scene.onKeyboardObservable.add((kbInfo) => {
-        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN && kbInfo.event.key === 'd') {
-            // resetSelectedFaces(box);
-            // TODO: CANCEL EXTRUSION
-            box.setVerticesData(BABYLON.VertexBuffer.PositionKind, extrusionDetails.originalGeometry, true);
-            nullifyExtrusionDetails();
-            console.log("hehe");
+        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+            if (kbInfo.event.key === 'd') {
+                undoMesh(box, extrusionDetails);
+            }
+            else if(kbInfo.event.key === 'r') {
+                resetMesh(box, extrusionDetails);
+            }
+            else if(kbInfo.event.key === 's') {
+                isKeyPressed = true;
+            }
+        }
+        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
+            isKeyPressed = false;
         }
     });
-
-    // originalGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
-    scene.onKeyboardObservable.add((kbInfo) => {
-        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN && kbInfo.event.key === 'r') {
-            nullifyExtrusionDetails();
-            resetMesh(box);
-        }
-    });
-
 
     scene.onPointerMove = function (event) {
         
         var pickResult = scene.pick(scene.pointerX, scene.pointerY);
         if(extrusionDetails.allow == true){
             extrusionDetails.mesh.enableEdgesRendering();
-            extrudeFace(extrusionDetails.mesh, extrusionDetails.face, extrusionDetails.position, extrusionDetails.originalGeometry);
+            extrudeFace(extrusionDetails, isKeyPressed);
         }
         // Check if a mesh was picked
         if (pickResult.hit && pickResult.pickedMesh === box){
@@ -89,22 +78,28 @@ const createScene = function () {
         }
     };
 
+    scene.onPointerDown = function (event, pickResult) {
+        if (pickResult.hit && pickResult.pickedMesh === box) {
+            pressedDownOnFace = true;
+        }
+    }
+
     scene.onPointerUp = function (event, pickResult) {
         // Check if a mesh was picked
-        if(extrusionDetails.allow == true) {
-            nullifyExtrusionDetails();
-        }
-        else {
-            if (pickResult.hit && pickResult.pickedMesh === box) {
-                // TODO: CREATE NEW CUBE TO REPLACE OLD CUBE
-                extrusionDetails.allow = true;
-                extrusionDetails.mesh = box;
-                extrusionDetails.face = 2*Math.floor(pickResult.faceId/2);
-                extrusionDetails.position = unproject({x:scene.pointerX, y:scene.pointerY});
-                extrusionDetails.originalGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
-
-                // transformSide(pickResult, box);
-                changeColor(pickResult, box, new BABYLON.Color4(0.77, 0.93, 0.81, 1));
+        if(pressedDownOnFace == true){
+            if(extrusionDetails.allow == true) {
+                nullifyExtrusionDetails(extrusionDetails);
+                pressedDownOnFace = false;
+            }
+            else {
+                if (pickResult.hit && pickResult.pickedMesh === box) {
+                    // TODO: CREATE NEW CUBE TO REPLACE OLD CUBE
+                    extrusionDetails.allow = true;
+                    extrusionDetails.mesh = box;
+                    extrusionDetails.face = 2*Math.floor(pickResult.faceId/2);
+                    extrusionDetails.position = unproject({x:scene.pointerX, y:scene.pointerY});
+                    extrusionDetails.originalGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+                }
             }
         }
     };
@@ -177,15 +172,22 @@ function resetSelectedFaces(box) {
     selectedFace = -1;
 }
 
-function resetMesh(box) {
-    
+function resetMesh(box, extrusionDetails) {
+    nullifyExtrusionDetails(extrusionDetails);
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, resetGeometry, true);
     box.enableEdgesRendering();
 }
 
-function extrudeFace(mesh, facet, position, originalGeometry) {
+function undoMesh(box, extrusionDetails) {
+    box.setVerticesData(BABYLON.VertexBuffer.PositionKind, extrusionDetails.originalGeometry, true);
+    nullifyExtrusionDetails(extrusionDetails);
+}
 
-    
+function extrudeFace(extrusionDetails, isKeyPressed) {
+    var mesh = extrusionDetails.mesh;
+    var facet = extrusionDetails.face;
+    var position = extrusionDetails.position;
+    var originalGeometry = extrusionDetails.originalGeometry;
 
     // Get the mesh's geometry
     var facet = 2 * Math.floor(facet / 2);
@@ -227,7 +229,7 @@ function extrudeFace(mesh, facet, position, originalGeometry) {
         var v = BABYLON.Vector3.FromArray(geometry, i*3);
         verticlesList.forEach( vertex => {
             if(vertex.equals(v)) {
-                modifyDistance(geometry, i, faceNormal, offset.scale(14), originalGeometry);
+                modifyDistance(geometry, i, faceNormal, offset.scale(14), originalGeometry, isKeyPressed);
             }
         })
     }
@@ -235,19 +237,41 @@ function extrudeFace(mesh, facet, position, originalGeometry) {
     mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, Array.from(geometry), true);
 }
 
-function modifyDistance(geometry, i, faceNormal, offset, originalGeometry) {
+function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed) {
+    var spread = 0;
+    if(isKeyPressed) {
+        // faceNormal.x = 1;
+        // faceNormal`.y = 1;
+        // faceNormal.z = 1;
+        spread = 1;
+    }
 
-    var v = BABYLON.Vector3.FromArray(geometry, i * 3);
-    // v = v.add(faceNormal.scale(distance));
-    geometry[3 * i] = originalGeometry[3 * i] + (faceNormal.x * offset.x);
+    geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
     geometry[3 * i + 1] = originalGeometry[3 * i + 1] + (faceNormal.y * offset.y);
     geometry[3 * i + 2] = originalGeometry[3 * i + 2] + (faceNormal.z * offset.z);
+
+    // v = v.add(faceNormal.scale(distance));
+
 }
 
-function nullifyExtrusionDetails() {
+function nullifyExtrusionDetails(extrusionDetails) {
     extrusionDetails.allow = false;
     extrusionDetails.mesh = null;
     extrusionDetails.face = null;
     extrusionDetails.position = null;
-    extrusionDetails.originalGeometry = null;
+    // extrusionDetails.originalGeometry = null;
+}
+
+function setupLights(scene) {
+    const ambientLight1 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 1), scene);
+    ambientLight1.diffuse = new BABYLON.Color3(1, 1, 1);
+    ambientLight1.intensity = 0.5;
+
+    const ambientLight2 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(-1,-1,-1), scene);
+    ambientLight2.diffuse = new BABYLON.Color3(1, 1, 1);
+    ambientLight2.intensity = 0.5;
+
+    const light = new BABYLON.PointLight("light", new BABYLON.Vector3(6,3,0), scene);
+    light.diffuse = new BABYLON.Color3(1, 1, 1);
+    light.intensity = 1;
 }
