@@ -1,5 +1,5 @@
 const canvas = document.getElementById("renderCanvas"); // Get the canvas element
-const engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
+const engine = new BABYLON.Engine(canvas, true);
 var startTime = new Date().getTime();
 var resetGeometry = null;
 var selectedFace = -1;
