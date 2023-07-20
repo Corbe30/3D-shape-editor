@@ -1,0 +1,15 @@
+#infoBox {
+    position: absolute;
+    z-index: 1;
+    margin: 10px;
+    left: 1px;
+    top: 1px;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+p {
+    font-family: Arial, Helvetica, sans-serif;
+}
