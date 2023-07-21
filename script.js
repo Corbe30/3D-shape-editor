@@ -13,6 +13,7 @@ var extrusionDetails = {
     originalGeometry: null,
     centerVertex: null
 };
+var allowRotation = false;
 
 const unproject = ({ x, y }) =>
 BABYLON.Vector3.Unproject(
@@ -65,11 +66,23 @@ const createScene = function () {
                 resetMesh(box, extrusionDetails, cursorText);
             }
             else if(kbInfo.event.key === 's') {
-                allowScaling = true;
+                if(allowScaling == false) {
+                    allowScaling = true;
+                    allowRotation = false;
+                }
+                else {
+                    allowScaling = false;
+                }
             }
-        }
-        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
-            allowScaling = false;
+            else if(kbInfo.event.key === 'r') {
+                if(allowRotation == false) {
+                    allowRotation = true;
+                    allowScaling = false;
+                }
+                else {
+                    allowRotation = false;
+                }
+            }
         }
     });
 
@@ -78,7 +91,11 @@ const createScene = function () {
         var pickResult = scene.pick(scene.pointerX, scene.pointerY);
         if(extrusionDetails.allow == true){
             extrusionDetails.mesh.enableEdgesRendering();
-            extrudeFace(extrusionDetails, allowScaling, cursorText);
+            if(!allowRotation)
+                extrudeFace(extrusionDetails, allowScaling, cursorText);
+            else
+                rotateMesh(extrusionDetails, cursorText);
+
         }
         // Check if a mesh was picked
         if (pickResult.hit && pickResult.pickedMesh === box){
@@ -194,6 +211,72 @@ function undoMesh(box, extrusionDetails, cursorText) {
     nullifyExtrusionDetails(extrusionDetails, cursorText);
 }
 
+function rotateMesh(extrusionDetails, cursorText) {
+    var mesh = extrusionDetails.mesh;
+    var facet = extrusionDetails.face;
+    var position = extrusionDetails.position;
+    var originalGeometry = extrusionDetails.originalGeometry;
+
+    // Get the mesh's geometry
+    var facet = 2 * Math.floor(facet / 2);
+    var indices = mesh.getIndices();
+    var geometry = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+
+    const mousePosition = unproject({
+        x: scene.pointerX,
+        y: scene.pointerY,
+    });
+    var offset = (mousePosition.subtract(position)).scale(14);
+
+    var indicesList = new Set();
+    indicesList.add(indices[facet * 3]);
+    indicesList.add(indices[facet * 3 + 1]);
+    indicesList.add(indices[facet * 3 + 2]);
+    indicesList.add(indices[(facet + 1) * 3]);
+    indicesList.add(indices[(facet + 1) * 3 + 1]);
+    indicesList.add(indices[(facet + 1) * 3 + 2]);
+    
+    var verticlesList = new Set();
+    indicesList.forEach( index => {
+        var v = BABYLON.Vector3.FromArray(geometry, index * 3);
+        verticlesList.add(v);
+    });
+
+    if(extrusionDetails.centerVertex == null) {
+        var centerVertex = new BABYLON.Vector3(0,0,0);
+        verticlesList.forEach( vertex => {
+            centerVertex.x += vertex.x;
+            centerVertex.y += vertex.y;
+            centerVertex.z += vertex.z;
+        })
+        centerVertex.x = centerVertex.x/verticlesList.size;
+        centerVertex.y = centerVertex.y/verticlesList.size;
+        centerVertex.z = centerVertex.z/verticlesList.size;
+        extrusionDetails.centerVertex = centerVertex;
+    }
+
+    if(extrusionDetails.faceNormal == null) {
+        var [v0, v1, v2] = Array.from(verticlesList);
+        var faceNormal = BABYLON.Vector3.Cross(
+            v2.subtract(v0), 
+            v1.subtract(v0)
+        );
+        faceNormal.normalize();
+        faceNormal.x =  Math.abs(faceNormal.x);
+        faceNormal.y =  Math.abs(faceNormal.y);
+        faceNormal.z =  Math.abs(faceNormal.z);
+        extrusionDetails.faceNormal = faceNormal;
+    }
+
+    var width = engine.getRenderWidth();
+    var height = engine.getRenderHeight();
+    cursorText.leftInPixels = scene.pointerX - (width / 2.0) + 55;
+    cursorText.topInPixels = scene.pointerY - (height / 2.0) + 15;
+
+    var rotationQuaternion = BABYLON.Quaternion.RotationAxis(extrusionDetails.faceNormal, offset.length());
+    mesh.rotationQuaternion = rotationQuaternion;
+}
+
 function extrudeFace(extrusionDetails, isKeyPressed, cursorText) {
     var mesh = extrusionDetails.mesh;
     var facet = extrusionDetails.face;
@@ -238,16 +321,18 @@ function extrudeFace(extrusionDetails, isKeyPressed, cursorText) {
         extrusionDetails.centerVertex = centerVertex;
     }
 
-    var [v0, v1, v2] = Array.from(verticlesList);
-
-    var faceNormal = BABYLON.Vector3.Cross(
-        v2.subtract(v0), 
-        v1.subtract(v0)
-    );
-    faceNormal.normalize();
-    faceNormal.x =  Math.abs(faceNormal.x);
-    faceNormal.y =  Math.abs(faceNormal.y);
-    faceNormal.z =  Math.abs(faceNormal.z);
+    if(extrusionDetails.faceNormal == null) {
+        var [v0, v1, v2] = Array.from(verticlesList);
+        var faceNormal = BABYLON.Vector3.Cross(
+            v2.subtract(v0), 
+            v1.subtract(v0)
+        );
+        faceNormal.normalize();
+        faceNormal.x =  Math.abs(faceNormal.x);
+        faceNormal.y =  Math.abs(faceNormal.y);
+        faceNormal.z =  Math.abs(faceNormal.z);
+        extrusionDetails.faceNormal = faceNormal;
+    }
 
     var width = engine.getRenderWidth();
     var height = engine.getRenderHeight();
@@ -258,7 +343,7 @@ function extrudeFace(extrusionDetails, isKeyPressed, cursorText) {
         var v = BABYLON.Vector3.FromArray(geometry, i*3);
         verticlesList.forEach( vertex => {
             if(vertex.equals(v)) {
-                modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed, extrusionDetails.centerVertex, cursorText);
+                modifyDistance(geometry, i, extrusionDetails.faceNormal, offset, originalGeometry, isKeyPressed, extrusionDetails.centerVertex, cursorText);
             }
         })
     }
@@ -277,7 +362,7 @@ function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, allow
         geometry[3 * i + 0] = ((originalGeometry[3 * i + 0] - centerVertex.x) * (1 + offset.length())) + centerVertex.x;
         geometry[3 * i + 1] = ((originalGeometry[3 * i + 1] - centerVertex.y) * (1 + offset.length())) + centerVertex.y;
         geometry[3 * i + 2] = ((originalGeometry[3 * i + 2] - centerVertex.z) * (1 + offset.length())) + centerVertex.z;
-        cursorText.text = `${(1 + offset.length())}`;
+        cursorText.text = `${(1 + offset.length()).toFixed(2)}`;
     }
     
 }
@@ -288,6 +373,7 @@ function nullifyExtrusionDetails(extrusionDetails, cursorText) {
     extrusionDetails.face = null;
     extrusionDetails.position = null;
     extrusionDetails.centerVertex = null;
+    extrusionDetails.faceNormal = null;
     // extrusionDetails.originalGeometry = null;
     cursorText.text = "";
 }
