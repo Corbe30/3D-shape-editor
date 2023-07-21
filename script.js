@@ -56,7 +56,7 @@ const createScene = function () {
             else if(kbInfo.event.key === 'r') {
                 resetMesh(box, extrusionDetails);
             }
-            else if(kbInfo.event.key === 's') {
+            else if(kbInfo.event.key === 'x') {
                 isKeyPressed = true;
             }
         }
@@ -150,7 +150,7 @@ function changeColor(pickResult, box, clr) {
 function drawAxes(size, scene) {
 
     
-    var axisX = BABYLON.Mesh.CreateLines("axisX", [ 
+    var axisX = BABYLON.Mesh.CreateLines("axisX", [
         new BABYLON.Vector3(-size, 0, 0), new BABYLON.Vector3(size, 0, 0)], scene);
     axisX.color = new BABYLON.Color3(1, 0, 0);
     axisX.isPickable = false; 
