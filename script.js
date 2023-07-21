@@ -3,7 +3,7 @@ const engine = new BABYLON.Engine(canvas, true);
 var startTime = new Date().getTime();
 var resetGeometry = null;
 var pressedDownOnFace = false;
-var isKeyPressed = false;
+var allowScaling = false;
 var selectedFace = -1;
 var extrusionDetails = {
     allow: false,
@@ -13,6 +13,7 @@ var extrusionDetails = {
     originalGeometry: null,
     centerVertex: null
 };
+
 const unproject = ({ x, y }) =>
 BABYLON.Vector3.Unproject(
     new BABYLON.Vector3(x, y, 0),
@@ -27,6 +28,13 @@ BABYLON.Vector3.Unproject(
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.95, 0.95, 0.95, 1);
+    
+    var cursorText = new BABYLON.GUI.TextBlock();
+    cursorText.text = "";
+    cursorText.color = "black";
+    cursorText.fontSize = 12;
+    var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    advancedTexture.addControl(cursorText);
 
     var box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
@@ -51,17 +59,17 @@ const createScene = function () {
     scene.onKeyboardObservable.add((kbInfo) => {
         if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
             if (kbInfo.event.key === 'd') {
-                undoMesh(box, extrusionDetails);
+                undoMesh(box, extrusionDetails, cursorText);
             }
             else if(kbInfo.event.key === 'r') {
-                resetMesh(box, extrusionDetails);
+                resetMesh(box, extrusionDetails, cursorText);
             }
-            else if(kbInfo.event.key === 'x') {
-                isKeyPressed = true;
+            else if(kbInfo.event.key === 's') {
+                allowScaling = true;
             }
         }
         if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
-            isKeyPressed = false;
+            allowScaling = false;
         }
     });
 
@@ -70,7 +78,7 @@ const createScene = function () {
         var pickResult = scene.pick(scene.pointerX, scene.pointerY);
         if(extrusionDetails.allow == true){
             extrusionDetails.mesh.enableEdgesRendering();
-            extrudeFace(extrusionDetails, isKeyPressed);
+            extrudeFace(extrusionDetails, allowScaling, cursorText);
         }
         // Check if a mesh was picked
         if (pickResult.hit && pickResult.pickedMesh === box){
@@ -91,7 +99,7 @@ const createScene = function () {
         // Check if a mesh was picked
         if(pressedDownOnFace == true){
             if(extrusionDetails.allow == true) {
-                nullifyExtrusionDetails(extrusionDetails);
+                nullifyExtrusionDetails(extrusionDetails, cursorText);
                 pressedDownOnFace = false;
             }
             else {
@@ -175,18 +183,18 @@ function resetSelectedFaces(box) {
     selectedFace = -1;
 }
 
-function resetMesh(box, extrusionDetails) {
-    nullifyExtrusionDetails(extrusionDetails);
+function resetMesh(box, extrusionDetails, cursorText) {
+    nullifyExtrusionDetails(extrusionDetails, cursorText);
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, resetGeometry, true);
     box.enableEdgesRendering();
 }
 
-function undoMesh(box, extrusionDetails) {
+function undoMesh(box, extrusionDetails, cursorText) {
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, extrusionDetails.originalGeometry, true);
-    nullifyExtrusionDetails(extrusionDetails);
+    nullifyExtrusionDetails(extrusionDetails, cursorText);
 }
 
-function extrudeFace(extrusionDetails, isKeyPressed) {
+function extrudeFace(extrusionDetails, isKeyPressed, cursorText) {
     var mesh = extrusionDetails.mesh;
     var facet = extrusionDetails.face;
     var position = extrusionDetails.position;
@@ -201,7 +209,7 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
         x: scene.pointerX,
         y: scene.pointerY,
     });
-    var offset = mousePosition.subtract(position);
+    var offset = (mousePosition.subtract(position)).scale(14);
 
     var indicesList = new Set();
     indicesList.add(indices[facet * 3]);
@@ -230,7 +238,6 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
         extrusionDetails.centerVertex = centerVertex;
     }
 
-
     var [v0, v1, v2] = Array.from(verticlesList);
 
     var faceNormal = BABYLON.Vector3.Cross(
@@ -242,11 +249,16 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
     faceNormal.y =  Math.abs(faceNormal.y);
     faceNormal.z =  Math.abs(faceNormal.z);
 
+    var width = engine.getRenderWidth();
+    var height = engine.getRenderHeight();
+    cursorText.leftInPixels = scene.pointerX - (width / 2.0) + 55;
+    cursorText.topInPixels = scene.pointerY - (height / 2.0) + 15;
+
     for(var i = 0; i < geometry.length / 3; i++){
         var v = BABYLON.Vector3.FromArray(geometry, i*3);
         verticlesList.forEach( vertex => {
             if(vertex.equals(v)) {
-                modifyDistance(geometry, i, faceNormal, offset.scale(14), originalGeometry, isKeyPressed, extrusionDetails.centerVertex);
+                modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed, extrusionDetails.centerVertex, cursorText);
             }
         })
     }
@@ -254,26 +266,30 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
     mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, Array.from(geometry), true);
 }
 
-function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed, centerVertex) {
-    if(!isKeyPressed) {
+function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, allowScaling, centerVertex, cursorText) {
+    if(!allowScaling) {
         geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
         geometry[3 * i + 1] = originalGeometry[3 * i + 1] + (faceNormal.y * offset.y);
         geometry[3 * i + 2] = originalGeometry[3 * i + 2] + (faceNormal.z * offset.z);
+        cursorText.text = `[${(faceNormal.x * offset.x).toFixed(2)}, ${(faceNormal.y * offset.y).toFixed(2)}, ${(faceNormal.z * offset.z).toFixed(2)}]`;
     }
     else {
         geometry[3 * i + 0] = ((originalGeometry[3 * i + 0] - centerVertex.x) * (1 + offset.length())) + centerVertex.x;
         geometry[3 * i + 1] = ((originalGeometry[3 * i + 1] - centerVertex.y) * (1 + offset.length())) + centerVertex.y;
         geometry[3 * i + 2] = ((originalGeometry[3 * i + 2] - centerVertex.z) * (1 + offset.length())) + centerVertex.z;
+        cursorText.text = `${(1 + offset.length())}`;
     }
+    
 }
 
-function nullifyExtrusionDetails(extrusionDetails) {
+function nullifyExtrusionDetails(extrusionDetails, cursorText) {
     extrusionDetails.allow = false;
     extrusionDetails.mesh = null;
     extrusionDetails.face = null;
     extrusionDetails.position = null;
     extrusionDetails.centerVertex = null;
     // extrusionDetails.originalGeometry = null;
+    cursorText.text = "";
 }
 
 function setupLights(scene) {
