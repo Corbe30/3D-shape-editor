@@ -10,7 +10,8 @@ var extrusionDetails = {
     mesh: null,
     face: null,
     position: null,
-    originalGeometry: null
+    originalGeometry: null,
+    centerVertex: null
 };
 const unproject = ({ x, y }) =>
 BABYLON.Vector3.Unproject(
@@ -32,6 +33,8 @@ const createScene = function () {
     box.material.backFaceCulling = false;
     resetGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     extrusionDetails.originalGeometry = resetGeometry;
+
+    box.rotation.x = Math.PI/6;
 
     box.isPickable = true;
     box.enableEdgesRendering();
@@ -199,7 +202,7 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
         y: scene.pointerY,
     });
     var offset = mousePosition.subtract(position);
-    
+
     var indicesList = new Set();
     indicesList.add(indices[facet * 3]);
     indicesList.add(indices[facet * 3 + 1]);
@@ -213,6 +216,20 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
         var v = BABYLON.Vector3.FromArray(geometry, index * 3);
         verticlesList.add(v);
     });
+
+    if(extrusionDetails.centerVertex == null) {
+        var centerVertex = new BABYLON.Vector3(0,0,0);
+        verticlesList.forEach( vertex => {
+            centerVertex.x += vertex.x;
+            centerVertex.y += vertex.y;
+            centerVertex.z += vertex.z;
+        })
+        centerVertex.x = centerVertex.x/verticlesList.size;
+        centerVertex.y = centerVertex.y/verticlesList.size;
+        centerVertex.z = centerVertex.z/verticlesList.size;
+        extrusionDetails.centerVertex = centerVertex;
+    }
+
 
     var [v0, v1, v2] = Array.from(verticlesList);
 
@@ -229,7 +246,7 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
         var v = BABYLON.Vector3.FromArray(geometry, i*3);
         verticlesList.forEach( vertex => {
             if(vertex.equals(v)) {
-                modifyDistance(geometry, i, faceNormal, offset.scale(14), originalGeometry, isKeyPressed);
+                modifyDistance(geometry, i, faceNormal, offset.scale(14), originalGeometry, isKeyPressed, extrusionDetails.centerVertex);
             }
         })
     }
@@ -237,21 +254,17 @@ function extrudeFace(extrusionDetails, isKeyPressed) {
     mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, Array.from(geometry), true);
 }
 
-function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed) {
-    var spread = 0;
-    if(isKeyPressed) {
-        // faceNormal.x = 1;
-        // faceNormal`.y = 1;
-        // faceNormal.z = 1;
-        spread = 1;
+function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, isKeyPressed, centerVertex) {
+    if(!isKeyPressed) {
+        geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
+        geometry[3 * i + 1] = originalGeometry[3 * i + 1] + (faceNormal.y * offset.y);
+        geometry[3 * i + 2] = originalGeometry[3 * i + 2] + (faceNormal.z * offset.z);
     }
-
-    geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
-    geometry[3 * i + 1] = originalGeometry[3 * i + 1] + (faceNormal.y * offset.y);
-    geometry[3 * i + 2] = originalGeometry[3 * i + 2] + (faceNormal.z * offset.z);
-
-    // v = v.add(faceNormal.scale(distance));
-
+    else {
+        geometry[3 * i + 0] = ((originalGeometry[3 * i + 0] - centerVertex.x) * (1 + offset.length())) + centerVertex.x;
+        geometry[3 * i + 1] = ((originalGeometry[3 * i + 1] - centerVertex.y) * (1 + offset.length())) + centerVertex.y;
+        geometry[3 * i + 2] = ((originalGeometry[3 * i + 2] - centerVertex.z) * (1 + offset.length())) + centerVertex.z;
+    }
 }
 
 function nullifyExtrusionDetails(extrusionDetails) {
@@ -259,6 +272,7 @@ function nullifyExtrusionDetails(extrusionDetails) {
     extrusionDetails.mesh = null;
     extrusionDetails.face = null;
     extrusionDetails.position = null;
+    extrusionDetails.centerVertex = null;
     // extrusionDetails.originalGeometry = null;
 }
 
