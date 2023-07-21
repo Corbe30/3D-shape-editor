@@ -1,9 +1,15 @@
-const canvas = document.getElementById("renderCanvas"); // Get the canvas element
+import { transparentBlack, alertRed } from "./utility/constants.mjs";
+
+const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
+
 var startTime = new Date().getTime();
+
 var resetGeometry = null;
+var resetRotation = null;
 var pressedDownOnFace = false;
 var allowScaling = false;
+var allowRotation = false;
 var selectedFace = -1;
 var extrusionDetails = {
     allow: false,
@@ -11,12 +17,10 @@ var extrusionDetails = {
     face: null,
     position: null,
     originalGeometry: null,
-    centerVertex: null
+    originalRotation: null,
+    centerVertex: null,
+    indicesList: null
 };
-
-var allowRotation = false;
-var transparentBlack = "grey";
-var alertRed = "red";
 
 const unproject = ({ x, y }) =>
 BABYLON.Vector3.Unproject(
@@ -45,8 +49,12 @@ const createScene = function () {
     var box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
     box.material.backFaceCulling = false;
+    
     resetGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     extrusionDetails.originalGeometry = resetGeometry;
+
+    resetRotation = BABYLON.Quaternion.RotationAxis(new BABYLON.Vector3(0, 0, 0), 0);
+    extrusionDetails.originalRotation = resetRotation;
 
     box.isPickable = true;
     box.enableEdgesRendering();
@@ -150,6 +158,7 @@ const createScene = function () {
                     extrusionDetails.face = 2*Math.floor(pickResult.faceId/2);
                     extrusionDetails.position = unproject({x:scene.pointerX, y:scene.pointerY});
                     extrusionDetails.originalGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+                    extrusionDetails.originalRotation = box.rotationQuaternion;
                 }
             }
         }
@@ -226,11 +235,15 @@ function resetSelectedFaces(box) {
 function resetMesh(box, extrusionDetails, cursorText) {
     nullifyExtrusionDetails(extrusionDetails, cursorText);
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, resetGeometry, true);
+    box.rotationQuaternion = resetRotation;
+    // box.dispose();
+    // box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.enableEdgesRendering();
 }
 
 function undoMesh(box, extrusionDetails, cursorText) {
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, extrusionDetails.originalGeometry, true);
+    box.rotationQuaternion = extrusionDetails.originalRotation;
     nullifyExtrusionDetails(extrusionDetails, cursorText);
 }
 
@@ -238,7 +251,6 @@ function rotateMesh(extrusionDetails, cursorText) {
     var mesh = extrusionDetails.mesh;
     var facet = extrusionDetails.face;
     var position = extrusionDetails.position;
-    var originalGeometry = extrusionDetails.originalGeometry;
 
     // Get the mesh's geometry
     var facet = 2 * Math.floor(facet / 2);
@@ -251,20 +263,22 @@ function rotateMesh(extrusionDetails, cursorText) {
     });
     var offset = (mousePosition.subtract(position)).scale(14);
 
-    var indicesList = new Set();
-    indicesList.add(indices[facet * 3]);
-    indicesList.add(indices[facet * 3 + 1]);
-    indicesList.add(indices[facet * 3 + 2]);
-    indicesList.add(indices[(facet + 1) * 3]);
-    indicesList.add(indices[(facet + 1) * 3 + 1]);
-    indicesList.add(indices[(facet + 1) * 3 + 2]);
-    
+    if(extrusionDetails.indicesList == null) {
+        extrusionDetails.indicesList = new Set();
+        extrusionDetails.indicesList.add(indices[facet * 3]);
+        extrusionDetails.indicesList.add(indices[facet * 3 + 1]);
+        extrusionDetails.indicesList.add(indices[facet * 3 + 2]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 1]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 2]);
+    }
+        
     var verticlesList = new Set();
-    indicesList.forEach( index => {
-        var v = BABYLON.Vector3.FromArray(geometry, index * 3);
+        extrusionDetails.indicesList.forEach( index => {
+            var v = BABYLON.Vector3.FromArray(geometry, index * 3);
         verticlesList.add(v);
-    });
-
+        });
+    
     if(extrusionDetails.centerVertex == null) {
         var centerVertex = new BABYLON.Vector3(0,0,0);
         verticlesList.forEach( vertex => {
@@ -317,19 +331,21 @@ function extrudeFace(extrusionDetails, isKeyPressed, cursorText) {
     });
     var offset = (mousePosition.subtract(position)).scale(14);
 
-    var indicesList = new Set();
-    indicesList.add(indices[facet * 3]);
-    indicesList.add(indices[facet * 3 + 1]);
-    indicesList.add(indices[facet * 3 + 2]);
-    indicesList.add(indices[(facet + 1) * 3]);
-    indicesList.add(indices[(facet + 1) * 3 + 1]);
-    indicesList.add(indices[(facet + 1) * 3 + 2]);
-    
+    if(extrusionDetails.indicesList == null) {
+        extrusionDetails.indicesList = new Set();
+        extrusionDetails.indicesList.add(indices[facet * 3]);
+        extrusionDetails.indicesList.add(indices[facet * 3 + 1]);
+        extrusionDetails.indicesList.add(indices[facet * 3 + 2]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 1]);
+        extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 2]);
+    }
+        
     var verticlesList = new Set();
-    indicesList.forEach( index => {
-        var v = BABYLON.Vector3.FromArray(geometry, index * 3);
+        extrusionDetails.indicesList.forEach( index => {
+            var v = BABYLON.Vector3.FromArray(geometry, index * 3);
         verticlesList.add(v);
-    });
+        });
 
     if(extrusionDetails.centerVertex == null) {
         var centerVertex = new BABYLON.Vector3(0,0,0);
@@ -397,6 +413,7 @@ function nullifyExtrusionDetails(extrusionDetails, cursorText) {
     extrusionDetails.position = null;
     extrusionDetails.centerVertex = null;
     extrusionDetails.faceNormal = null;
+    extrusionDetails.indicesList = null;
     // extrusionDetails.originalGeometry = null;
     cursorText.text = "";
 }
