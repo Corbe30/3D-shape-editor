@@ -61,7 +61,7 @@ const createScene = function () {
             if (kbInfo.event.key === 'd') {
                 undoMesh(box, extrusionDetails, cursorText);
             }
-            else if(kbInfo.event.key === 'r') {
+            else if(kbInfo.event.key === 'x') {
                 resetMesh(box, extrusionDetails, cursorText);
             }
             else if(kbInfo.event.key === 's') {
