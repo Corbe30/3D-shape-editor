@@ -13,7 +13,10 @@ var extrusionDetails = {
     originalGeometry: null,
     centerVertex: null
 };
+
 var allowRotation = false;
+var transparentBlack = "grey";
+var alertRed = "red";
 
 const unproject = ({ x, y }) =>
 BABYLON.Vector3.Unproject(
@@ -37,13 +40,13 @@ const createScene = function () {
     var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     advancedTexture.addControl(cursorText);
 
+    var guideLine = BABYLON.Mesh.CreateLines("guideLine", [new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, 0)], scene);
+
     var box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
     box.material.backFaceCulling = false;
     resetGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     extrusionDetails.originalGeometry = resetGeometry;
-
-    box.rotation.x = Math.PI/6;
 
     box.isPickable = true;
     box.enableEdgesRendering();
@@ -61,26 +64,35 @@ const createScene = function () {
         if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
             if (kbInfo.event.key === 'd') {
                 undoMesh(box, extrusionDetails, cursorText);
+                guideLine.dispose();
+                
             }
             else if(kbInfo.event.key === 'x') {
                 resetMesh(box, extrusionDetails, cursorText);
+                guideLine.dispose();
             }
             else if(kbInfo.event.key === 's') {
                 if(allowScaling == false) {
                     allowScaling = true;
                     allowRotation = false;
+                    document.getElementById("scale").style.backgroundColor = alertRed;
+                    document.getElementById("rotate").style.backgroundColor = transparentBlack;
                 }
                 else {
                     allowScaling = false;
+                    document.getElementById("scale").style.backgroundColor = transparentBlack;
                 }
             }
             else if(kbInfo.event.key === 'r') {
                 if(allowRotation == false) {
                     allowRotation = true;
                     allowScaling = false;
+                    document.getElementById("scale").style.backgroundColor = transparentBlack;
+                    document.getElementById("rotate").style.backgroundColor = alertRed;
                 }
                 else {
                     allowRotation = false;
+                    document.getElementById("rotate").style.backgroundColor = transparentBlack;
                 }
             }
         }
@@ -91,6 +103,16 @@ const createScene = function () {
         var pickResult = scene.pick(scene.pointerX, scene.pointerY);
         if(extrusionDetails.allow == true){
             extrusionDetails.mesh.enableEdgesRendering();
+            
+            const mousePosition = unproject({
+                x: scene.pointerX,
+                y: scene.pointerY,
+            });
+            
+            guideLine.dispose();
+            guideLine = BABYLON.Mesh.CreateLines("guideLine", [mousePosition, extrusionDetails.position], scene);
+            guideLine.color = new BABYLON.Color3(0, 0, 0);
+
             if(!allowRotation)
                 extrudeFace(extrusionDetails, allowScaling, cursorText);
             else
@@ -117,6 +139,7 @@ const createScene = function () {
         if(pressedDownOnFace == true){
             if(extrusionDetails.allow == true) {
                 nullifyExtrusionDetails(extrusionDetails, cursorText);
+                guideLine.dispose();
                 pressedDownOnFace = false;
             }
             else {
