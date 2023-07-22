@@ -1,17 +1,33 @@
+/**
+ * Sets up the lighting for the scene.
+ *
+ * @param {BABYLON.Scene} scene - The Babylon.js scene to set up the lighting for.
+ * @returns {void}
+ */
 export function setupLights(scene) {
+    // ambient light for I octant
     const ambientLight1 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 1), scene);
     ambientLight1.diffuse = new BABYLON.Color3(1, 1, 1);
     ambientLight1.intensity = 0.5;
 
+    // ambient light for VII octant
     const ambientLight2 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(-1,-1,-1), scene);
     ambientLight2.diffuse = new BABYLON.Color3(1, 1, 1);
-    ambientLight2.intensity = 0.5;
+    ambientLight2.intensity = 0.75;
 
+    // point light for I quadrant in the XY plane
     const light = new BABYLON.PointLight("light", new BABYLON.Vector3(6,3,0), scene);
     light.diffuse = new BABYLON.Color3(1, 1, 1);
     light.intensity = 1;
 }
 
+/**
+ * Draws axes of the specified size in the scene.
+ *
+ * @param {number} size - The size of the axes to be drawn.
+ * @param {BABYLON.Scene} scene - The Babylon.js scene to draw the axes in.
+ * @returns {void}
+ */
 export function drawAxes(size, scene) {
     var axisX = BABYLON.Mesh.CreateLines("axisX", [
         new BABYLON.Vector3(-size, 0, 0), new BABYLON.Vector3(size, 0, 0)], scene);

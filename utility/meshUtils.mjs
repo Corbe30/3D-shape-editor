@@ -1,5 +1,14 @@
 import { unproject } from "./mathUtils.mjs";
 
+/**
+ * Changes the color of a selected face of the mesh box.
+ *
+ * @param {BABYLON.PickingInfo} pickResult - The picking result containing information about the selected face.
+ * @param {BABYLON.Mesh} box - The 3D mesh box.
+ * @param {BABYLON.Color4} clr - The color to set for the selected face.
+ * @param {number} selectedFace - The index of the selected face to modify.
+ * @returns {void}
+ */
 export function changeColor(pickResult, box, clr, selectedFace) { 
     var face = pickResult.faceId / 2;
     var facet = 2 * Math.floor(face);
@@ -23,6 +32,13 @@ export function changeColor(pickResult, box, clr, selectedFace) {
     box.setVerticesData(BABYLON.VertexBuffer.ColorKind, colors, true);
 }
 
+/**
+ * Resets the colors of all faces of the mesh box to their default values.
+ *
+ * @param {BABYLON.Mesh} box - The 3D mesh box.
+ * @param {number} selectedFace - The index of the selected face (not used in this function).
+ * @returns {void}
+ */
 export function resetSelectedFaces(box, selectedFace) {
     var positions = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     if(positions == null) return;
@@ -33,15 +49,31 @@ export function resetSelectedFaces(box, selectedFace) {
     selectedFace = -1;
 }
 
+/**
+ * Resets the mesh box to its original geometry and rotation.
+ *
+ * @param {BABYLON.Mesh} box - The 3D mesh box.
+ * @param {object} extrusionDetails - The extrusion details object containing details about selected mesh.
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @param {Float32Array} resetGeometry - The original geometry data to reset the mesh.
+ * @param {BABYLON.Quaternion} resetRotation - The original rotation quaternion to reset the mesh.
+ * @returns {void}
+ */
 export function resetMesh(box, extrusionDetails, cursorText, resetGeometry, resetRotation) {
     nullifyExtrusionDetails(extrusionDetails, cursorText);
     box.setVerticesData(BABYLON.VertexBuffer.PositionKind, resetGeometry, true);
     box.rotationQuaternion = resetRotation;
-    // box.dispose();
-    // box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.enableEdgesRendering();
 }
 
+/**
+ * Undoes the transformation of the mesh box and resets it to its original state.
+ *
+ * @param {BABYLON.Mesh} box - The 3D mesh box.
+ * @param {object} extrusionDetails - The extrusion details object containing details about selected mesh.
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @returns {void}
+ */
 export function undoMesh(box, extrusionDetails, cursorText) {
     if(extrusionDetails.originalGeometry != null)
         box.setVerticesData(BABYLON.VertexBuffer.PositionKind, extrusionDetails.originalGeometry, true);
@@ -50,6 +82,16 @@ export function undoMesh(box, extrusionDetails, cursorText) {
     nullifyExtrusionDetails(extrusionDetails, cursorText);
 }
 
+
+/**
+ * Rotates the mesh box based on mouse movement
+ *
+ * @param {object} extrusionDetails - The extrusion details object containing details about selected mesh.
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @param {BABYLON.Engine} engine - The Babylon.js engine instance.
+ * @param {BABYLON.Scene} scene - The Babylon.js scene.
+ * @returns {void}
+ */
 export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
     var mesh = extrusionDetails.mesh;
     var facet = extrusionDetails.face;
@@ -60,6 +102,7 @@ export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
     var indices = mesh.getIndices();
     var geometry = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
 
+    // Calculate the offset vector from the mouse position to the clicked position
     const mousePosition = unproject({
         x: scene.pointerX,
         y: scene.pointerY,
@@ -67,6 +110,7 @@ export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
     });
     var offset = (mousePosition.subtract(position)).scale(14);
 
+    // If the indices list for the selected face is not yet created, initialize it
     if(extrusionDetails.indicesList == null) {
         extrusionDetails.indicesList = new Set();
         extrusionDetails.indicesList.add(indices[facet * 3]);
@@ -76,13 +120,15 @@ export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
         extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 1]);
         extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 2]);
     }
-        
-    var verticlesList = new Set();
-        extrusionDetails.indicesList.forEach( index => {
-            var v = BABYLON.Vector3.FromArray(geometry, index * 3);
-        verticlesList.add(v);
-        });
     
+    // Create a set to store the unique vertices of the selected face
+    var verticlesList = new Set();
+    extrusionDetails.indicesList.forEach( index => {
+        var v = BABYLON.Vector3.FromArray(geometry, index * 3);
+    verticlesList.add(v);
+    });
+    
+    // If the center vertex of the selected face is not yet calculated, calculate & initialize it
     if(extrusionDetails.centerVertex == null) {
         var centerVertex = new BABYLON.Vector3(0,0,0);
         verticlesList.forEach( vertex => {
@@ -96,6 +142,7 @@ export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
         extrusionDetails.centerVertex = centerVertex;
     }
 
+    // If the face normal of the selected face is not yet calculated, calculate & set it
     if(extrusionDetails.faceNormal == null) {
         var [v0, v1, v2] = Array.from(verticlesList);
         var faceNormal = BABYLON.Vector3.Cross(
@@ -109,16 +156,29 @@ export function rotateMesh(extrusionDetails, cursorText, engine, scene) {
         extrusionDetails.faceNormal = faceNormal;
     }
 
+    // Update cursor position to adjust help-text on each mouse move
     var width = engine.getRenderWidth();
     var height = engine.getRenderHeight();
     cursorText.leftInPixels = scene.pointerX - (width / 2.0) + 55;
     cursorText.topInPixels = scene.pointerY - (height / 2.0) + 15;
 
+    // Calculate & apply the rotation quaternion based on the face normal and offset
     var rotationQuaternion = BABYLON.Quaternion.RotationAxis(extrusionDetails.faceNormal, offset.length());
     mesh.rotationQuaternion = rotationQuaternion;
 }
 
-export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, scene) {
+
+/**
+ * Transforms (scaling/extruding) the selected face of the mesh box based on mouse movement
+ *
+ * @param {object} extrusionDetails - The extrusion details object containing details about selected mesh.
+ * @param {boolean} allowScaling - A flag indicating whether to scale or not.
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @param {BABYLON.Engine} engine - The Babylon.js engine instance.
+ * @param {BABYLON.Scene} scene - The Babylon.js scene.
+ * @returns {void}
+ */
+export function transformFace(extrusionDetails, allowScaling, cursorText, engine, scene) {
     var mesh = extrusionDetails.mesh;
     var facet = extrusionDetails.face;
     var position = extrusionDetails.position;
@@ -129,6 +189,7 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
     var indices = mesh.getIndices();
     var geometry = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
 
+    // Calculate the offset vector from the mouse position to the clicked position
     const mousePosition = unproject({
         x: scene.pointerX,
         y: scene.pointerY,
@@ -136,6 +197,7 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
     });
     var offset = (mousePosition.subtract(position)).scale(14);
 
+    // If the indices list for the selected face is not yet created, initialize it
     if(extrusionDetails.indicesList == null) {
         extrusionDetails.indicesList = new Set();
         extrusionDetails.indicesList.add(indices[facet * 3]);
@@ -145,13 +207,15 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
         extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 1]);
         extrusionDetails.indicesList.add(indices[(facet + 1) * 3 + 2]);
     }
-        
+    
+    // Create a set to store the unique vertices of the selected face
     var verticlesList = new Set();
-        extrusionDetails.indicesList.forEach( index => {
-            var v = BABYLON.Vector3.FromArray(geometry, index * 3);
-        verticlesList.add(v);
-        });
+    extrusionDetails.indicesList.forEach( index => {
+        var v = BABYLON.Vector3.FromArray(geometry, index * 3);
+    verticlesList.add(v);
+    });
 
+    // If the center vertex of the selected face is not yet calculated, calculate it
     if(extrusionDetails.centerVertex == null) {
         var centerVertex = new BABYLON.Vector3(0,0,0);
         verticlesList.forEach( vertex => {
@@ -165,6 +229,7 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
         extrusionDetails.centerVertex = centerVertex;
     }
 
+    // If the face normal of the selected face is not yet calculated, calculate it
     if(extrusionDetails.faceNormal == null) {
         var [v0, v1, v2] = Array.from(verticlesList);
         var faceNormal = BABYLON.Vector3.Cross(
@@ -178,16 +243,18 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
         extrusionDetails.faceNormal = faceNormal;
     }
 
+    // Update cursor position to adjust help-text on each mouse move
     var width = engine.getRenderWidth();
     var height = engine.getRenderHeight();
     cursorText.leftInPixels = scene.pointerX - (width / 2.0) + 55;
     cursorText.topInPixels = scene.pointerY - (height / 2.0) + 15;
 
+    // Loop through all relevant vertices to apply transformation to the selected face
     for(var i = 0; i < geometry.length / 3; i++){
         var v = BABYLON.Vector3.FromArray(geometry, i*3);
         verticlesList.forEach( vertex => {
             if(vertex.equals(v)) {
-                modifyDistance(geometry, i, extrusionDetails.faceNormal, offset, originalGeometry, isKeyPressed, extrusionDetails.centerVertex, cursorText);
+                modifyDistance(geometry, i, extrusionDetails.faceNormal, offset, originalGeometry, allowScaling, extrusionDetails.centerVertex, cursorText);
             }
         })
     }
@@ -195,6 +262,19 @@ export function extrudeFace(extrusionDetails, isKeyPressed, cursorText, engine, 
     mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, Array.from(geometry), true);
 }
 
+/**
+ * performs mathematical calculations for extrusion or scaling on mesh
+ *
+ * @param {Float32Array} geometry - The geometry data of the mesh box.
+ * @param {number} i - The index of the vertex to modify.
+ * @param {BABYLON.Vector3} faceNormal - The normal vector of the selected face
+ * @param {BABYLON.Vector3} offset - The offset vector to apply to the vertex during extrusion/scaling (equals to cursor offset)
+ * @param {Float32Array} originalGeometry - The original geometry data of the mesh box.
+ * @param {boolean} allowScaling - A flag indicating whether scaling is allowed during extrusion
+ * @param {BABYLON.Vector3} centerVertex - The center vertex used for scaling
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @returns {void}
+ */
 function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, allowScaling, centerVertex, cursorText) {
     if(!allowScaling) {
         geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
@@ -210,6 +290,13 @@ function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, allow
     }
 }
 
+/**
+ * Resets the mesh details and clears cursor text information.
+ *
+ * @param {object} extrusionDetails - The extrusion details object to reset.
+ * @param {BABYLON.GUI.TextBlock} cursorText - text that follows the cursor on scaling/extrusion
+ * @returns {void}
+ */
 export function nullifyExtrusionDetails(extrusionDetails, cursorText) {
     extrusionDetails.allow = false;
     extrusionDetails.mesh = null;

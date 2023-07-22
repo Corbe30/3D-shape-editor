@@ -1,5 +1,5 @@
-import { transparentBlack, alertRed, babylonColor } from "./utility/colorUtils.mjs";
-import { changeColor, resetSelectedFaces, resetMesh, undoMesh, rotateMesh, extrudeFace, nullifyExtrusionDetails } from "./utility/meshUtils.mjs";
+import { cssColor, babylonColor } from "./utility/colorUtils.mjs";
+import { changeColor, resetSelectedFaces, resetMesh, undoMesh, rotateMesh, transformFace, nullifyExtrusionDetails } from "./utility/meshUtils.mjs";
 import { setupLights, drawAxes } from "./utility/sceneUtils.mjs";
 import { unproject } from "./utility/mathUtils.mjs";
 
@@ -12,6 +12,7 @@ var pressedDownOnFace = false;
 var allowScaling = false;
 var allowRotation = false;
 var selectedFace = -1;
+
 var extrusionDetails = {
     allow: false,
     mesh: null,
@@ -23,11 +24,11 @@ var extrusionDetails = {
     indicesList: null
 };
 
-// Add your code here matching the playground format
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.95, 0.95, 0.95, 1);
     
+    // initialize text that follows the cursor on scaling/extrusion
     var cursorText = new BABYLON.GUI.TextBlock();
     cursorText.text = "";
     cursorText.color = "black";
@@ -35,21 +36,23 @@ const createScene = function () {
     var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     advancedTexture.addControl(cursorText);
 
+    // initialize guide line when the mesh is modified
     var guideLine = BABYLON.Mesh.CreateLines("guideLine", [new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, 0)], scene);
 
+    // initializes box in the scene
     var box = BABYLON.MeshBuilder.CreateBox("box", {size: 2}, scene);
     box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
-    box.material.backFaceCulling = false;
+    box.material.backFaceCulling = false; // double-sided face
     
+    // stored for resetMesh function
     resetGeometry = box.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     extrusionDetails.originalGeometry = resetGeometry;
-
     resetRotation = BABYLON.Quaternion.RotationAxis(new BABYLON.Vector3(0, 0, 0), 0);
     extrusionDetails.originalRotation = resetRotation;
 
     box.isPickable = true;
     box.enableEdgesRendering();
-    box.edgesWidth = 0;
+    box.edgesWidth = 2;
     box.edgesColor = new BABYLON.Color4(0, 0, 0, 1);
 
     const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2.5, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0));
@@ -65,6 +68,7 @@ const createScene = function () {
                 undoMesh(box, extrusionDetails, cursorText);
                 extrusionDetails.originalGeometry = null;
                 extrusionDetails.originalRotation = null;
+                box.enableEdgesRendering();
                 guideLine.dispose();
                 
             }
@@ -73,27 +77,31 @@ const createScene = function () {
                 guideLine.dispose();
             }
             else if(kbInfo.event.key === 's') {
+                // turn on scaling option
                 if(allowScaling == false) {
                     allowScaling = true;
                     allowRotation = false;
-                    document.getElementById("scale").style.backgroundColor = alertRed;
-                    document.getElementById("rotate").style.backgroundColor = transparentBlack;
+                    document.getElementById("scale").style.backgroundColor = cssColor.alertRed;
+                    document.getElementById("rotate").style.backgroundColor = cssColor.transparentBlack;
                 }
+                // turn off scaling option
                 else {
                     allowScaling = false;
-                    document.getElementById("scale").style.backgroundColor = transparentBlack;
+                    document.getElementById("scale").style.backgroundColor = cssColor.transparentBlack;
                 }
             }
             else if(kbInfo.event.key === 'r') {
+                // turn on rotation option
                 if(allowRotation == false) {
                     allowRotation = true;
                     allowScaling = false;
-                    document.getElementById("scale").style.backgroundColor = transparentBlack;
-                    document.getElementById("rotate").style.backgroundColor = alertRed;
+                    document.getElementById("scale").style.backgroundColor = cssColor.transparentBlack;
+                    document.getElementById("rotate").style.backgroundColor = cssColor.alertRed;
                 }
+                // turn on rotation option
                 else {
                     allowRotation = false;
-                    document.getElementById("rotate").style.backgroundColor = transparentBlack;
+                    document.getElementById("rotate").style.backgroundColor = cssColor.transparentBlack;
                 }
             }
         }
@@ -116,7 +124,7 @@ const createScene = function () {
             guideLine.color = babylonColor.black;
 
             if(!allowRotation)
-                extrudeFace(extrusionDetails, allowScaling, cursorText, engine, scene);
+                transformFace(extrusionDetails, allowScaling, cursorText, engine, scene);
             else
                 rotateMesh(extrusionDetails, cursorText, engine, scene);
 
@@ -147,7 +155,6 @@ const createScene = function () {
             }
             else {
                 if (pickResult.hit && pickResult.pickedMesh === box) {
-                    // TODO: CREATE NEW CUBE TO REPLACE OLD CUBE
                     extrusionDetails.allow = true;
                     extrusionDetails.mesh = box;
                     extrusionDetails.face = 2*Math.floor(pickResult.faceId/2);
@@ -164,12 +171,11 @@ const createScene = function () {
 
 const scene = createScene();
 
-// Register a render loop to repeatedly render the scene
+// Register a render loop
 engine.runRenderLoop(function () {
     scene.render();
 });
 
-// Watch for browser/canvas resize events
 window.addEventListener("resize", function () {
   engine.resize();
 });

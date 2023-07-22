@@ -1,6 +1,7 @@
-export var transparentBlack = "grey";
-export var alertRed = "red";
-
+export var cssColor = {
+    transparentBlack: "grey",
+    alertRed: "red"
+}
 
 export var babylonColor = {
     black: new BABYLON.Color3(0, 0, 0),
