@@ -277,12 +277,16 @@ export function transformFace(extrusionDetails, allowScaling, cursorText, engine
  */
 function modifyDistance(geometry, i, faceNormal, offset, originalGeometry, allowScaling, centerVertex, cursorText) {
     if(!allowScaling) {
+        // moves each vertex along the face normal direction using the mouse offset
         geometry[3 * i + 0] = originalGeometry[3 * i + 0] + (faceNormal.x * offset.x);
         geometry[3 * i + 1] = originalGeometry[3 * i + 1] + (faceNormal.y * offset.y);
         geometry[3 * i + 2] = originalGeometry[3 * i + 2] + (faceNormal.z * offset.z);
         cursorText.text = `[${(faceNormal.x * offset.x).toFixed(2)}, ${(faceNormal.y * offset.y).toFixed(2)}, ${(faceNormal.z * offset.z).toFixed(2)}]`;
     }
     else {
+        // ((originalGeometry[3 * i + 0] - centerVertex.x) : makes origin as the scaling point
+        // * (1 + offset.length()) : apply the scaling with mouse offset
+        // + centerVertex.x : move the vertex from origin back to its original center
         geometry[3 * i + 0] = ((originalGeometry[3 * i + 0] - centerVertex.x) * (1 + offset.length())) + centerVertex.x;
         geometry[3 * i + 1] = ((originalGeometry[3 * i + 1] - centerVertex.y) * (1 + offset.length())) + centerVertex.y;
         geometry[3 * i + 2] = ((originalGeometry[3 * i + 2] - centerVertex.z) * (1 + offset.length())) + centerVertex.z;
