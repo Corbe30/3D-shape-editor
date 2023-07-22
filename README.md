@@ -2,6 +2,7 @@
 
 ## About
 A 3D shape editor written in Babylon.js.
+![Screenshot of interface](https://raw.githubusercontent.com/Corbe30/3D-shape-editor/main/images/3dShapeEditor.png)
 
 ## How to Run
 Visit https://corbe30.github.io/3D-shape-editor/. <br>
